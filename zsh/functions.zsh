@@ -1,3 +1,25 @@
+###--- Get default branch ---###
+git-default-branch() {
+  # Try symbolic ref first (fastest)
+  local branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+  
+  # If that fails, query the remote
+  if [ -z "$branch" ]; then
+    branch=$(git remote show origin 2>/dev/null | grep 'HEAD branch' | cut -d' ' -f5)
+  fi
+  
+  # Fallback to common defaults
+  if [ -z "$branch" ]; then
+    if git show-ref --verify --quiet refs/remotes/origin/main; then
+      branch="main"
+    elif git show-ref --verify --quiet refs/remotes/origin/master; then
+      branch="master"
+    fi
+  fi
+  
+  echo "$branch"
+}
+
 ###--- Switch to main safely ---###
 git2main() {
     local stashed=0
@@ -8,7 +30,9 @@ git2main() {
         stashed=1
     fi
 
-    git fetch --all --prune && git switch main && git pull
+    local defaultBranch
+    defaultBranch=$(git-default-branch)
+    git fetch --all --prune && git switch "$defaultBranch" && git pull
 
     # Apply stash if changes were stashed
     if [ "$stashed" -eq 1 ] && [ $? -eq 0 ]; then
@@ -17,7 +41,7 @@ git2main() {
     fi
 }
 
-###--- Switch to new branch based on origin/main ---###
+###--- Switch to new branch based on the default branch ---###
 git2new() {
   if [ -z "$1" ]; then
     echo "Usage: git2new <branch-name>"
@@ -58,13 +82,13 @@ _git_count_to_nearest_shared_ancestor() {
 
 ###--- Rebase commits onto target branch ---###
 # rebase one or more commits from the current branch
-#  onto the target-branch (default target is origin/main)
+#  onto the target-branch (default target is origin/<defaultBranch>)
 # Without the --c option, it will rebase all commits that are unique to the current branch
 # With the --c option, it will rebase the specified number of commits from the current branch
 # Usage: gitreonto [--c=<commit_count>] [--t=<target-branch>]
 git-reonto() {
-  local commit_count=""
-  local target_branch="origin/main"
+  local commit_count
+  local target_branch
   while [[ $# -gt 0 ]]; do
     case $1 in
       --c=*)
@@ -83,8 +107,13 @@ git-reonto() {
     esac
   done
 
-  local branch_name="$(git branch --show-current)"
+  if [ -z "$target_branch" ]; then
+    local defaultBranch
+    defaultBranch=$(git-default-branch)
+    target_branch="origin/$defaultBranch"
+  fi
 
+  local branch_name="$(git branch --show-current)"
   if [[ -z "$branch_name" ]]; then
     echo "Error: Could not determine branch name" >&2
     return 1
