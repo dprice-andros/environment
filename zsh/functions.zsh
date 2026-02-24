@@ -30,9 +30,9 @@ git2main() {
         stashed=1
     fi
 
-    local dfltBranch
-    dfltBranch=$(git-default-branch)
-    git fetch --all --prune && git switch dfltBranch && git pull
+    local defaultBranch
+    defaultBranch=$(git-default-branch)
+    git fetch --all --prune && git switch "$defaultBranch" && git pull
 
     # Apply stash if changes were stashed
     if [ "$stashed" -eq 1 ] && [ $? -eq 0 ]; then
